@@ -16,9 +16,18 @@ machine git.heroku.com
     password ${api_key}
 EOF`;
 
-const addRemote = ({ app_name, dontautocreate, buildpack, region, team, stack }) => {
+const addRemote = ({
+  app_name,
+  dontautocreate,
+  buildpack,
+  region,
+  team,
+  stack,
+}) => {
   try {
-    execSync("heroku git:remote --app " + app_name);
+    execSync("heroku git:remote --app " + app_name, {
+      maxBuffer: 100 * 1000 * 1000,
+    });
     console.log("Added git remote heroku");
   } catch (err) {
     if (dontautocreate) throw err;
@@ -29,7 +38,10 @@ const addRemote = ({ app_name, dontautocreate, buildpack, region, team, stack })
         (buildpack ? " --buildpack " + buildpack : "") +
         (region ? " --region " + region : "") +
         (stack ? " --stack " + stack : "") +
-        (team ? " --team " + team : "")
+        (team ? " --team " + team : ""),
+      {
+        maxBuffer: 100 * 1000 * 1000,
+      }
     );
   }
 };
@@ -51,14 +63,18 @@ const addConfig = ({ app_name, env_file, appdir }) => {
     configVars = [...configVars, ...newVars];
   }
   if (configVars.length !== 0) {
-    execSync(`heroku config:set --app=${app_name} ${configVars.join(" ")}`);
+    execSync(`heroku config:set --app=${app_name} ${configVars.join(" ")}`, {
+      maxBuffer: 100 * 1000 * 1000,
+    });
   }
 };
 
 const createProcfile = ({ procfile, appdir }) => {
   if (procfile) {
     fs.writeFileSync(path.join(appdir, "Procfile"), procfile);
-    execSync(`git add -A && git commit -m "Added Procfile"`);
+    execSync(`git add -A && git commit -m "Added Procfile"`, {
+      maxBuffer: 100 * 1000 * 1000,
+    });
     console.log("Written Procfile with custom configuration");
   }
 };
@@ -76,32 +92,39 @@ const deploy = ({
   if (usedocker) {
     execSync(
       `heroku container:push ${dockerHerokuProcessType} --app ${app_name} ${dockerBuildArgs}`,
+      { maxBuffer: 100 * 1000 * 1000 },
       appdir ? { cwd: appdir } : null
     );
     execSync(
       `heroku container:release ${dockerHerokuProcessType} --app ${app_name}`,
+      { maxBuffer: 100 * 1000 * 1000 },
       appdir ? { cwd: appdir } : null
     );
   } else {
     let remote_branch = execSync(
-      "git remote show heroku | grep 'HEAD' | cut -d':' -f2 | sed -e 's/^ *//g' -e 's/ *$//g'"
+      "git remote show heroku | grep 'HEAD' | cut -d':' -f2 | sed -e 's/^ *//g' -e 's/ *$//g'",
+      { maxBuffer: 100 * 1000 * 1000 }
     )
       .toString()
       .trim();
 
     if (remote_branch === "master") {
-      execSync("heroku plugins:install heroku-repo");
-      execSync("heroku repo:reset -a " + app_name);
+      execSync("heroku plugins:install heroku-repo", {
+        maxBuffer: 100 * 1000 * 1000,
+      });
+      execSync("heroku repo:reset -a " + app_name, {
+        maxBuffer: 100 * 1000 * 1000,
+      });
     }
 
     if (appdir === "") {
       execSync(`git push heroku ${branch}:refs/heads/main ${force}`, {
-        maxBuffer: 104857600,
+        maxBuffer: 100 * 1000 * 1000,
       });
     } else {
       execSync(
         `git push ${force} heroku \`git subtree split --prefix=${appdir} ${branch}\`:refs/heads/main`,
-        { maxBuffer: 104857600 }
+        { maxBuffer: 100 * 1000 * 1000 }
       );
     }
   }
@@ -115,6 +138,7 @@ const healthcheckFailed = ({
   if (rollbackonhealthcheckfailed) {
     execSync(
       `heroku rollback --app ${app_name}`,
+      { maxBuffer: 100 * 1000 * 1000 },
       appdir ? { cwd: appdir } : null
     );
     core.setFailed(
@@ -179,41 +203,52 @@ if (heroku.dockerBuildArgs) {
   try {
     // Just Login
     if (heroku.justlogin) {
-      execSync(createCatFile(heroku));
+      execSync(createCatFile(heroku), { maxBuffer: 100 * 1000 * 1000 });
       console.log("Created and wrote to ~/.netrc");
 
       return;
     }
 
-    execSync(`git config user.name "Heroku-Deploy"`);
-    execSync(`git config user.email "${heroku.email}"`);
-    const status = execSync("git status --porcelain").toString().trim();
+    execSync(`git config user.name "Heroku-Deploy"`, {
+      maxBuffer: 100 * 1000 * 1000,
+    });
+    execSync(`git config user.email "${heroku.email}"`, {
+      maxBuffer: 100 * 1000 * 1000,
+    });
+    const status = execSync("git status --porcelain", {
+      maxBuffer: 100 * 1000 * 1000,
+    })
+      .toString()
+      .trim();
     if (status) {
       execSync(
-        'git add -A && git commit -m "Commited changes from previous actions"'
+        'git add -A && git commit -m "Commited changes from previous actions"',
+        { maxBuffer: 100 * 1000 * 1000 }
       );
     }
 
     // Check if using Docker
     if (!heroku.usedocker) {
       // Check if Repo clone is shallow
-      const isShallow = execSync(
-        "git rev-parse --is-shallow-repository"
-      ).toString();
+      const isShallow = execSync("git rev-parse --is-shallow-repository", {
+        maxBuffer: 100 * 1000 * 1000,
+      }).toString();
 
       // If the Repo clone is shallow, make it unshallow
       if (isShallow === "true\n") {
-        execSync("git fetch --prune --unshallow");
+        execSync("git fetch --prune --unshallow", {
+          maxBuffer: 100 * 1000 * 1000,
+        });
       }
     }
 
-    execSync(createCatFile(heroku));
+    execSync(createCatFile(heroku), { maxBuffer: 100 * 1000 * 1000 });
     console.log("Created and wrote to ~/.netrc");
 
     createProcfile(heroku);
 
     if (heroku.usedocker) {
-      execSync("heroku container:login");
+      execSync("heroku container:login", { maxBuffer: 100 * 1000 * 1000 });
     }
     console.log("Successfully logged into heroku");
 
